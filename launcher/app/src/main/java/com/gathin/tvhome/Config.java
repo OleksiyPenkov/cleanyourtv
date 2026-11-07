@@ -42,8 +42,19 @@ final class Config {
     static final String SETTINGS_NAME = "launcher_settings";
     static final String ROWS_BELOW_DOCK_KEY = "rows_below_dock";
     static final String WALLPAPER_CHOICE_KEY = "wallpaper_choice";
+    static final String THEME_CHOICE_KEY = "theme_choice";
     static final String DOCK_OPACITY_KEY = "dock_opacity";
     static final String CLOCK_FORMAT_KEY = "clock_format";
+    static final String DOCK_STYLE_KEY = "dock_style";
+    static final String CINEMATIC_HOME_KEY = "cinematic_home";
+    static final String ALWAYS_SHOW_NAMES_KEY = "always_show_names";
+    static final String WALLPAPER_DIM_KEY = "wallpaper_dim";
+    static final String WALLPAPER_ROTATION_KEY = "wallpaper_rotation_minutes";
+    static final String GLASS_STYLE_KEY = "glass_style";
+    static final String GLOW_MODE_KEY = "glow_mode";
+    static final String IDLE_CLOCK_KEY = "home_idle_clock_minutes";
+    static final String BACK_OPENS_CLOCK_KEY = "back_opens_clock";
+    static final String SHOW_STATS_KEY = "show_stats";
     /**
      * Counts the changes made in Launcher settings. Home remembers the count it was built with and rebuilds on
      * resume when it differs, however the settings were left (see MainActivity#onResume).
@@ -432,6 +443,31 @@ final class Config {
         return ctx.getExternalFilesDir(null);
     }
 
+    /** The active theme folder: themes/<choice>/ when chosen and valid, otherwise the root dir. */
+    static File activeDir(Context ctx) {
+        File root = dir(ctx);
+        if (root == null) return null;
+        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        return themeDir(root, choices.getString(THEME_CHOICE_KEY, null));
+    }
+
+    static File themeDir(File root, String choice) {
+        if (root == null || choice == null || !ThemeFiles.themeName(choice)) return root;
+        File sub = new File(new File(root, ThemeFiles.THEMES), choice);
+        return new File(sub, FILE_NAME).isFile() ? sub : root;
+    }
+
+    static List<String> themeNames(File root) {
+        if (root == null) return Collections.emptyList();
+        File themes = new File(root, ThemeFiles.THEMES);
+        File[] dirs = themes.listFiles(f -> f.isDirectory() && ThemeFiles.themeName(f.getName())
+                && new File(f, FILE_NAME).isFile());
+        if (dirs == null || dirs.length == 0) return Collections.emptyList();
+        List<String> names = new ArrayList<>(dirs.length);
+        for (File d : dirs) names.add(d.getName());
+        Collections.sort(names);
+        return names;
+    }
     static Config load(Context ctx) {
         Resources res = ctx.getResources();
         List<String> dock = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.dock_apps)));
@@ -543,10 +579,15 @@ final class Config {
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
         boolean applied = false;
 
-        File dir = dir(ctx);
-        File file = dir != null ? new File(dir, FILE_NAME) : null;
+        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        File rootDir = dir(ctx);
+        File baseFile = rootDir != null ? new File(rootDir, FILE_NAME) : null;
         boolean mounted = Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState());
-        JSONObject json = readOverlay(ctx, file, mounted);
+        if (mounted) syncThemeChoices(choices, rootDir, baseFile);
+        File dir = themeDir(rootDir, choices.getString(THEME_CHOICE_KEY, null));
+        JSONObject baseJson = readOverlay(ctx, baseFile, mounted);
+        JSONObject pickedJson = dir != null && !dir.equals(rootDir) ? read(new File(dir, FILE_NAME)) : null;
+        JSONObject json = baseJson != null ? baseJson : pickedJson;
         if (json != null) {
             applied = true;
             dock = stringList(json, "dock_apps", dock);
@@ -568,6 +609,20 @@ final class Config {
             inputSources = stringList(json, "input_sources", inputSources);
             inputUriScheme = string(json, "input_uri_scheme", inputUriScheme).trim();
             columns = integer(json, "columns", columns, 1, 8);
+            settingsKeycodes = intArray(json, "settings_key_keycodes", settingsKeycodes);
+            settingsKeyPanel = bool(json, "settings_key_panel", settingsKeyPanel);
+            restoreKeyServices = bool(json, "restore_key_services", restoreKeyServices);
+            inputKeycodes = intArray(json, "input_key_keycodes", inputKeycodes);
+            handleViewInputs = bool(json, "handle_view_inputs", handleViewInputs);
+            appKeys = stringList(json, "app_keys", appKeys);
+            stockHomeRedirect = string(json, "stock_home_redirect", stockHomeRedirect);
+            vpn = string(json, "vpn_app", vpn);
+            topMenu = bool(json, "top_menu", topMenu);
+            launcherSettingsButton = bool(json, "launcher_settings_button", launcherSettingsButton);
+        }
+        if (pickedJson != null) json = pickedJson;
+        if (json != null) {
+            applied = true;
             rowsBelow = integer(json, "rows_below_dock", rowsBelow, 0, 3);
             animations = bool(json, "animations", animations);
             advancedEffects = bool(json, "advanced_effects", advancedEffects);
@@ -583,8 +638,7 @@ final class Config {
             openOnStartOnWake = bool(json, "open_on_start_on_wake", openOnStartOnWake);
             dockTitle = bool(json, "dock_title", dockTitle);
             dockRow = bool(json, "dock_row", dockRow);
-            topMenu = bool(json, "top_menu", topMenu);
-            launcherSettingsButton = bool(json, "launcher_settings_button", launcherSettingsButton);
+            // top_menu and launcher_settings_button are read from devJson above
             reorderButton = bool(json, "reorder_button", reorderButton);
             showNetworkPill = bool(json, "show_network_pill", showNetworkPill);
             showInputsPill = bool(json, "show_inputs_pill", showInputsPill);
@@ -601,7 +655,7 @@ final class Config {
             focusOvershoot = bool(json, "focus_overshoot", focusOvershoot);
             wallpaperCaptions = bool(json, "wallpaper_captions", wallpaperCaptions);
             tileMenu = bool(json, "tile_menu", tileMenu);
-            vpn = string(json, "vpn_app", vpn);
+            // vpn_app is read from devJson above
             homeSettings = bool(json, "show_home_settings_shortcut", homeSettings);
             showStats = bool(json, "show_stats", showStats);
             gameDay = string(json, "game_day", gameDay);
@@ -611,13 +665,7 @@ final class Config {
             uniformTiles = bool(json, "uniform_tiles", uniformTiles);
             background = color(json, "background_color", background);
             skyIntensity = integer(json, "sky_intensity", skyIntensity, 0, 100);
-            settingsKeycodes = intArray(json, "settings_key_keycodes", settingsKeycodes);
-            settingsKeyPanel = bool(json, "settings_key_panel", settingsKeyPanel);
-            restoreKeyServices = bool(json, "restore_key_services", restoreKeyServices);
-            inputKeycodes = intArray(json, "input_key_keycodes", inputKeycodes);
-            handleViewInputs = bool(json, "handle_view_inputs", handleViewInputs);
-            appKeys = stringList(json, "app_keys", appKeys);
-            stockHomeRedirect = string(json, "stock_home_redirect", stockHomeRedirect);
+            // keycode/input/app_keys/redirect keys are read from devJson above
             cinematic = bool(json, "cinematic_home", cinematic);
             ambientGlow = bool(json, "ambient_glow", ambientGlow);
             appGlow = bool(json, "app_glow", appGlow);
@@ -660,24 +708,37 @@ final class Config {
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
-        // A theme push or reset invalidates choices made on the TV. On first use, remember the
-        // current theme without clearing choices from an older launcher version.
-        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
-        // Unmounted storage looks like a theme reset; compare only once the file is readable.
-        if (mounted) syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
+        if (choices.contains(DOCK_STYLE_KEY)) {
+            int style = choices.getInt(DOCK_STYLE_KEY, 0);
+            dockBand = dockBandForStyle(style);
+            dockGlass = dockGlassForStyle(style);
+        }
+        cinematic = choices.getBoolean(CINEMATIC_HOME_KEY, cinematic);
+        alwaysShowNames = choices.getBoolean(ALWAYS_SHOW_NAMES_KEY, alwaysShowNames);
+        if (choices.contains(GLASS_STYLE_KEY)) glassStyle = glassStyle(choices.getString(GLASS_STYLE_KEY, glassStyle));
+        if (choices.contains(GLOW_MODE_KEY)) {
+            int mode = choices.getInt(GLOW_MODE_KEY, 1);
+            ambientGlow = ambientGlowForMode(mode);
+            appGlow = appGlowForMode(mode);
+        }
+        idleClockMinutes = chosenInt(choices.getInt(IDLE_CLOCK_KEY, -1), idleClockMinutes, 0, 1440);
+        backOpensClock = choices.getBoolean(BACK_OPENS_CLOCK_KEY, backOpensClock);
+        showStats = choices.getBoolean(SHOW_STATS_KEY, showStats);
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
         // A theme can also switch the wallpaper off while the file is still there.
         boolean wallpaperEnabled = json == null || bool(json, "wallpaper", true);
         if (!wallpaperEnabled) wallpaper = null;
         int rotationMinutes = json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440);
+        rotationMinutes = chosenInt(choices.getInt(WALLPAPER_ROTATION_KEY, -1), rotationMinutes, 0, 1440);
         int wallpaperDim = json == null ? 0 : integer(json, "wallpaper_dim", 0, 0, 90);
+        wallpaperDim = chosenInt(choices.getInt(WALLPAPER_DIM_KEY, -1), wallpaperDim, 0, 90);
         int dockOpacity = json == null ? 100 : integer(json, "dock_opacity", 100, 30, 100);
         dockOpacity = chosenDockOpacity(choices.getInt(DOCK_OPACITY_KEY, -1), dockOpacity);
         clockFormat = choices.getString(CLOCK_FORMAT_KEY, clockFormat);
@@ -686,15 +747,17 @@ final class Config {
         // An unknown order must not silently change how an existing collection rotates.
         if (!WallpaperRotation.validOrder(wallpaperOrder)) wallpaperOrder = WallpaperRotation.ORDER_SHUFFLE;
         List<File> wallpapers = new ArrayList<>();
-        if (rotationMinutes > 0 && dir != null && wallpaperEnabled) {
-            wallpapers.addAll(WallpaperRotation.images(new File(dir, "wallpapers")));
+        List<File> collection = dir == null ? Collections.emptyList()
+                : WallpaperRotation.images(new File(dir, "wallpapers"));
+        if (wallpaperEnabled) {
+            if (rotationMinutes > 0) wallpapers.addAll(collection);
+            else if (wallpaper == null && !collection.isEmpty()) wallpaper = collection.get(0);
         }
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
         String wallpaperChoice = choices.getString(WALLPAPER_CHOICE_KEY, null);
-        List<File> chosen = WallpaperRotation.chosen(dir == null ? Collections.emptyList()
-                : WallpaperRotation.images(new File(dir, "wallpapers")), wallpaper, wallpaperChoice);
+        List<File> chosen = WallpaperRotation.chosen(collection, wallpaper, wallpaperChoice);
         if (chosen != null) {
             wallpapers.clear();
             wallpapers.addAll(chosen);
@@ -714,7 +777,7 @@ final class Config {
                 vpn, homeSettings, showStats, gameDay, library, librarySelection, libraryOkOpens, uniformTiles, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, restoreKeyServices, wallpaperEnabled, wallpaper,
                 wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied, festival, inputKeycodes, appKeys, stockHomeRedirect,
-                json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow, appGlow, fadeRows,
+                baseJson == null ? Collections.emptyList() : raceCalendar(baseJson), cinematic, ambientGlow, appGlow, fadeRows,
                 Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding,
                 dockBand, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough,
                 consumeVolumeKeys, homeIgnoreChannelKeys, powerOnHome, homeLongPressHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
@@ -753,6 +816,26 @@ final class Config {
         return races;
     }
 
+    private static final String[] ON_TV_KEYS = {
+            "columns", ROWS_BELOW_DOCK_KEY, "animations", "advanced_effects",
+            WALLPAPER_CHOICE_KEY, THEME_CHOICE_KEY, DOCK_OPACITY_KEY, CLOCK_FORMAT_KEY,
+            DOCK_STYLE_KEY, CINEMATIC_HOME_KEY, ALWAYS_SHOW_NAMES_KEY,
+            WALLPAPER_DIM_KEY, WALLPAPER_ROTATION_KEY, GLASS_STYLE_KEY, GLOW_MODE_KEY,
+            IDLE_CLOCK_KEY, BACK_OPENS_CLOCK_KEY, SHOW_STATS_KEY
+    };
+
+    static SharedPreferences.Editor clearOnTvChoices(SharedPreferences.Editor editor) {
+        for (String key : ON_TV_KEYS) editor.remove(key);
+        return editor;
+    }
+
+    static boolean hasOnTvChoices(SharedPreferences choices) {
+        for (String key : ON_TV_KEYS) {
+            if (choices.contains(key)) return true;
+        }
+        return choices.contains(OpenOnStart.KEY);
+    }
+
     private static void syncThemeChoices(SharedPreferences choices, File dir, File config) {
         File revision = dir == null ? null : new File(dir, THEME_REVISION_NAME);
         String token = revisionToken(revision);
@@ -762,20 +845,51 @@ final class Config {
             // Existing preferences survive an app upgrade, unless the first launch follows an
             // explicit theme push or reset by the updated tools.
             SharedPreferences.Editor editor = choices.edit();
-            if (!"absent".equals(token)) editor.remove("columns").remove("animations")
-                    .remove("advanced_effects").remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY)
-                    .remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY);
+            if (!"absent".equals(token)) clearOnTvChoices(editor);
             editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         } else if (!seen.equals(signature)) {
-            choices.edit().remove("columns").remove("animations").remove("advanced_effects")
-                    .remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY).remove(DOCK_OPACITY_KEY)
-                    .remove(CLOCK_FORMAT_KEY).putString(THEME_SIGNATURE_KEY, signature).commit();
+            clearOnTvChoices(choices.edit())
+                    .putString(THEME_SIGNATURE_KEY, signature).commit();
         }
+    }
+
+    static int stepIndex(int current, int count, int delta) {
+        return count <= 0 ? 0 : ((current + delta) % count + count) % count;
+    }
+
+    static int chosenInt(int chosen, int theme, int min, int max) {
+        return chosen >= min && chosen <= max ? chosen : theme;
     }
 
     /** The dock band opacity chosen in Launcher settings, or the theme's when none (or an out-of-range one) is saved. */
     static int chosenDockOpacity(int chosen, int theme) {
-        return chosen >= 30 && chosen <= 100 ? chosen : theme;
+        return chosenInt(chosen, theme, 30, 100);
+    }
+
+    /** 0 = Solid, 1 = Glass, 2 = Floating (no band). */
+    static int dockStyle(boolean dockBand, boolean dockGlass) {
+        return !dockBand ? 2 : dockGlass ? 1 : 0;
+    }
+
+    static boolean dockBandForStyle(int style) {
+        return style != 2;
+    }
+
+    static boolean dockGlassForStyle(int style) {
+        return style == 1;
+    }
+
+    /** 0 = Off, 1 = Dock only, 2 = All tiles. */
+    static int glowMode(boolean ambientGlow, boolean appGlow) {
+        return appGlow ? 2 : ambientGlow ? 1 : 0;
+    }
+
+    static boolean ambientGlowForMode(int mode) {
+        return mode != 0;
+    }
+
+    static boolean appGlowForMode(int mode) {
+        return mode == 2;
     }
 
     private static String fileStamp(File file) {

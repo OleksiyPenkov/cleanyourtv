@@ -451,6 +451,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** clock_format, for the race panel's session times (the TextClocks take it in onCreate). */
     private String clockFormat = "system";
     private java.util.Map<Integer, String> homeHoldAppKeys = java.util.Collections.emptyMap();
+    private final SharedPreferences.OnSharedPreferenceChangeListener settingsListener = (prefs, key) -> {
+        if (Config.SETTINGS_REVISION_KEY.equals(key) && started && !resumed && !isFinishing()) recreate();
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -1079,6 +1082,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateClockVisibility();
         clockRefresh.start();   // with timeReceiver: while Home is visible, paused or not
         tileRefresh.onStart();
+        getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE)
+                .registerOnSharedPreferenceChangeListener(settingsListener);
     }
 
     @Override
@@ -1157,21 +1162,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == LAUNCHER_SETTINGS_REQUEST && resultCode == RESULT_OK
-                && data != null && data.getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) {
-            getIntent().putExtra(LauncherSettingsActivity.EXTRA_REORDER, true);
-            // The old activity must not consume the pending action, or rebuild a second time in onResume.
-            settingsRecreationPending = true;
-            settingsRevision = settingsRevision();
-            recreate();
+        if (requestCode == LAUNCHER_SETTINGS_REQUEST && resultCode == RESULT_OK && data != null) {
+            boolean reorder = data.getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false);
+            boolean editDock = data.getBooleanExtra(LauncherSettingsActivity.EXTRA_EDIT_DOCK, false);
+            if (reorder || editDock) {
+                if (reorder) getIntent().putExtra(LauncherSettingsActivity.EXTRA_REORDER, true);
+                if (editDock) getIntent().putExtra(LauncherSettingsActivity.EXTRA_EDIT_DOCK, true);
+                // The old activity must not consume the pending action, or rebuild a second time in onResume.
+                settingsRecreationPending = true;
+                settingsRevision = settingsRevision();
+                recreate();
+            }
         }
     }
 
     private void startPendingSettingsReorder() {
-        if (settingsRecreationPending || !tilesReady || !hasWindowFocus() || isFinishing()
-                || !getIntent().getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) return;
-        getIntent().removeExtra(LauncherSettingsActivity.EXTRA_REORDER);
-        toggleReorder();
+        if (settingsRecreationPending || !tilesReady || !hasWindowFocus() || isFinishing()) return;
+        if (getIntent().getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) {
+            getIntent().removeExtra(LauncherSettingsActivity.EXTRA_REORDER);
+            toggleReorder();
+        } else if (getIntent().getBooleanExtra(LauncherSettingsActivity.EXTRA_EDIT_DOCK, false)) {
+            getIntent().removeExtra(LauncherSettingsActivity.EXTRA_EDIT_DOCK);
+            startDockEdit();
+        }
     }
 
     /** Rebuilds the tiles (and the module cards), then puts focus back where it was. */
@@ -1331,6 +1344,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onStop();
         started = false;
         unregisterReceiver(timeReceiver);
+        getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(settingsListener);
         clockRefresh.stop();
         handler.removeCallbacks(clockCheck);
         stopped = true;

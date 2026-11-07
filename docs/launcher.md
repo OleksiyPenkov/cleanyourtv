@@ -48,19 +48,19 @@ Click **Settings** for the TV's own settings. Hold OK on it for its menu:
 - **Restart…** while `HomeKeyService` runs, which opens the system power menu (a launcher may not
   restart the TV itself).
 
-The launcher's own page has these rows, top to bottom:
+The launcher's own glass drawer has these rows, top to bottom (Left/Right steps values live over Home):
 
-- **Reorder apps**, only with `launcher_settings_button`, the same as the menu's.
+- **Reorder apps** (with `launcher_settings_button`) and **Edit dock** (with `dock_row`), the same as the menu's.
 - **Apps per row** 4, 5, 6 or 7; **Rows below dock** 0 to 3, how many rows of tiles stay visible under the
-  dock band; **Dock band opacity** 100%, 70%, 50% or 30%. The last two only do anything while the dock is
-  its own row (`dock_row`, on by default).
-- **Clock**: **System** follows the TV's 12- or 24-hour setting; **12-hour** or **24-hour** sets the launcher's
-  clocks (Home and the clock screensaver) to that, whatever the TV uses (`clock_format` in a theme).
-- **Wallpaper**: one picture from the theme's collection (or its `wallpaper.jpg`), **None**, or **Theme
-  default**. A pick holds that picture and stops the rotation until you choose Theme default, press
-  Follow theme, or push the theme again.
+  dock band; **Dock style** (Solid, Glass or Floating); **Dock band opacity** 100%, 70%, 50% or 30%;
+  **Cinematic shelf** and **Always show names** on or off.
+- **Theme** (when themes are installed) and **Wallpaper**: step through the theme's collection (or press OK for the list), **None**, or **Theme
+  default**; **Wallpaper dim** (0% to 70%) and **Wallpaper rotation** (Off, 15, 30 or 60 min).
+- **Focus style** (Glass, Rim or Halo) and **App glow** (Off, Dock or All tiles).
 - **Animations** on or off, and **Advanced effects** (tile lift, icon zoom and smooth ambient-colour
   transitions; they may use more memory) once animations are on.
+- **Clock** (**System**, **12-hour** or **24-hour**), **Idle clock** (Off, 5, 10, 15 or 30 min), **Back opens
+  clock** and **System stats** (CPU, memory and storage under the clock) on or off.
 - **Open on start**, only with `open_on_start_choice`: Off, or an app that opens instead of Home the first
   time Home comes up after the TV starts. Once per boot, so Home and Back still reach the launcher.
 - **Follow theme (reset on-TV choices)**, which clears every choice above. Pushing or resetting a theme

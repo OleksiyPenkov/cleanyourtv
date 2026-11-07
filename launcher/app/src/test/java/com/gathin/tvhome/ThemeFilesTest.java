@@ -49,4 +49,35 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.isCollection(Arrays.asList("wallpapers", "dusk.jpg")));
         assertFalse(ThemeFiles.isCollection(Collections.singletonList("config.json")));
     }
+
+    @Test public void namedThemeFilesAreAllowed() {
+        assertEquals("themes/aurora/config.json",
+                ThemeFiles.path(Arrays.asList("themes", "aurora", "config.json")));
+        assertEquals("themes/aurora/wallpaper.jpg",
+                ThemeFiles.path(Arrays.asList("themes", "aurora", "wallpaper.jpg")));
+        assertEquals("themes/stockholm/wallpapers/01-gryning.jpg",
+                ThemeFiles.path(Arrays.asList("themes", "stockholm", "wallpapers", "01-gryning.jpg")));
+        assertEquals("themes/stockholm/wallpapers/captions.txt",
+                ThemeFiles.path(Arrays.asList("themes", "stockholm", "wallpapers", "captions.txt")));
+        assertTrue(ThemeFiles.isCollection(Arrays.asList("themes", "stockholm", "wallpapers")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "..", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", ".hidden", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "a b", "config.json")));
+    }
+
+    @Test public void themeFoldersListsValidSubfoldersSortedByName() throws Exception {
+        java.io.File root = java.nio.file.Files.createTempDirectory("themes-test").toFile();
+        java.io.File themes = new java.io.File(root, "themes");
+        new java.io.File(themes, "stockholm").mkdirs();
+        new java.io.File(themes, "aurora").mkdirs();
+        new java.io.File(themes, ".hidden").mkdirs();
+        new java.io.File(themes, "empty").mkdirs();
+        java.nio.file.Files.write(new java.io.File(themes, "stockholm/config.json").toPath(), "{}".getBytes());
+        java.nio.file.Files.write(new java.io.File(themes, "aurora/config.json").toPath(), "{}".getBytes());
+        assertEquals(Arrays.asList("aurora", "stockholm"), Config.themeNames(root));
+        assertEquals(new java.io.File(themes, "aurora"), Config.themeDir(root, "aurora"));
+        assertEquals(root, Config.themeDir(root, "missing"));
+        assertEquals(root, Config.themeDir(root, ""));
+        assertEquals(root, Config.themeDir(root, null));
+    }
 }

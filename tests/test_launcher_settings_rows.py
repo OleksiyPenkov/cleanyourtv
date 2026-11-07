@@ -67,6 +67,10 @@ def row_labels(layout_text, activity_text, strings):
             if not (style.endswith("SettingsRow") or attr(view, "textSize") == "20sp"):
                 continue
             name = text[len("@string/"):]
+            label = row_label(name, strings)
+        elif text and style.endswith("SettingsRow"):
+            label = text.strip()
+            name = label.lower().replace(" ", "_")
         elif style.endswith("SettingsRow"):
             # A row whose label the code writes: `<id>.setText(getString(R.string.<name>` in the activity.
             view_id = attr(view, "id").split("/")[-1]
@@ -75,13 +79,12 @@ def row_labels(layout_text, activity_text, strings):
             if not found:
                 continue
             name = found.group(1)
+            label = row_label(name, strings)
         else:
             continue
-        label = row_label(name, strings)
         if label:
             rows.append((attr(view, "id").split("/")[-1] or name, label))
     return rows
-
 
 def missing_rows(section, rows):
     """The (id, label) rows the section does not name."""
@@ -89,12 +92,8 @@ def missing_rows(section, rows):
     return [(row_id, label) for row_id, label in rows if label.lower() not in seen]
 
 
-def numbered(label, layout_text):
-    """The numbers under a label row, in the order the screen shows them (columns, rows below dock).
-
-    The choices sit in a horizontal row of their own, right after the caption, so only that one sibling
-    is read: the next caption on the page belongs to the next setting.
-    """
+def numbered(label, layout_text, activity_text=""):
+    """The numbers under a label row, in the order the screen shows them (columns, rows below dock)."""
     root = ET.fromstring(layout_text)
     for parent in root.iter():
         children = list(parent)
@@ -109,9 +108,14 @@ def numbered(label, layout_text):
                     numbers.extend(found)
                 elif attr(sibling, "text"):
                     break       # the next caption: the choices above are the whole row
-            return numbers
+            if numbers:
+                return numbers
+    const = {"columns_label": "COLUMNS", "rows_below_dock_label": "ROWS_BELOW_DOCK"}.get(label)
+    if const and activity_text:
+        match = re.search(r"\b%s\s*=\s*\{([0-9,\s]+)\}" % const, activity_text)
+        if match:
+            return [value.strip() for value in match.group(1).split(",") if value.strip()]
     return []
-
 
 def detail_section(text, summary):
     """The text under one `## summary` heading up to the next `## `, or '' - so a row named three
@@ -146,8 +150,8 @@ class ScreenRows(unittest.TestCase):
         self.assertEqual(missing_rows(self.section, self.rows), [])
 
     def test_readme_names_the_numbers_under_each_row(self):
-        columns = numbered("columns_label", self.layout_text)
-        under_dock = numbered("rows_below_dock_label", self.layout_text)
+        columns = numbered("columns_label", self.layout_text, self.activity_text)
+        under_dock = numbered("rows_below_dock_label", self.layout_text, self.activity_text)
         self.assertEqual(columns, ["4", "5", "6", "7"])
         self.assertEqual(under_dock, ["0", "1", "2", "3"])
         opacities = re.search(r"DOCK_OPACITIES\s*=\s*\{([0-9,\s]+)\}", self.activity_text).group(1)

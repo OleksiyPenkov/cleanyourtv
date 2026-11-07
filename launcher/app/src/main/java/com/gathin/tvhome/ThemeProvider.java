@@ -44,8 +44,12 @@ public class ThemeProvider extends ContentProvider {
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         File dir = Config.dir(getContext());
-        if (dir != null && ThemeFiles.isCollection(uri.getPathSegments())) {
-            File[] images = new File(dir, ThemeFiles.WALLPAPERS).listFiles((d, name) -> ThemeFiles.collectionImage(name));
+        java.util.List<String> segs = uri.getPathSegments();
+        if (dir != null && ThemeFiles.isCollection(segs)) {
+            File wallDir = segs.size() == 3
+                    ? new File(dir, ThemeFiles.THEMES + "/" + segs.get(1) + "/" + ThemeFiles.WALLPAPERS)
+                    : new File(dir, ThemeFiles.WALLPAPERS);
+            File[] images = wallDir.listFiles((d, name) -> ThemeFiles.collectionImage(name));
             int n = 0;
             if (images != null) for (File f : images) if (f.delete()) n++;
             return n;
